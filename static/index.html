@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arker AI - Ethical Hacking Assistant</title>
+    <link rel="icon" type="image/png" href="/assets/favicon.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(to bottom, #1a202c, #2d3748);
+            min-height: 100vh;
+            color: #e2e8f0;
+            font-family: 'Arial', sans-serif;
+        }
+        .glow {
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+        .terminal {
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #3b82f6;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        #loading {
+            display: none;
+            color: #63b3ed;
+            text-align: center;
+            font-size: 1.2rem;
+            margin: 1rem 0;
+        }
+        #loadingSpinner {
+            display: none;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #voiceButton.recording {
+            background-color: #e53e3e;
+            transition: background-color 0.3s;
+        }
+        #status {
+            text-align: center;
+            color: #a0aec0;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1a202c;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3b82f6;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center p-4">
+    <div class="w-full max-w-4xl">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-blue-400">Arker AI</h1>
+            <p class="text-lg text-gray-300">Your EDITH-Inspired Ethical Hacking Assistant</p>
+        </header>
+        <div class="mb-6">
+            <div class="flex items-center space-x-2">
+                <input
+                    id="commandInput"
+                    type="text"
+                    placeholder="Enter command (e.g., 'weather in Tokyo', 'dns enum google.com')"
+                    class="w-full p-3 bg-gray-800 text-white border border-blue-500 rounded-lg glow focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                <button
+                    id="sendButton"
+                    onclick="sendCommand()"
+                    class="p-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 glow"
+                >
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+                <button
+                    id="voiceButton"
+                    onclick="toggleVoice()"
+                    class="p-3 bg-gray-700 text-white rounded-lg hover:bg-gray-600 glow"
+                >
+                    <i class="fas fa-microphone"></i>
+                </button>
+            </div>
+            <p id="voiceStatus" class="text-sm text-gray-400 mt-2 hidden">Listening...</p>
+            <div id="loadingSpinner"></div>
+            <p id="status">Ready, boss.</p>
+        </div>
+        <div id="loading">Scanning...</div>
+        <div class="terminal mb-6">
+            <h2 class="text-xl font-semibold text-blue-400 mb-2">Terminal Output</h2>
+            <div id="output" class="text-gray-200"></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div class="terminal">
+                <h2 class="text-xl font-semibold text-blue-400 mb-2">Port Scan</h2>
+                <div id="portScanOutput" class="text-gray-200"></div>
+            </div>
+            <div class="terminal">
+                <h2 class="text-xl font-semibold text-blue-400 mb-2">OSINT Crawl</h2>
+                <div id="osintOutput" class="text-gray-200"></div>
+            </div>
+            <div class="terminal">
+                <h2 class="text-xl font-semibold text-blue-400 mb-2">Threat Intelligence</h2>
+                <div id="threatIntelOutput" class="text-gray-200"></div>
+            </div>
+            <div class="terminal">
+                <h2 class="text-xl font-semibold text-blue-400 mb-2">DNS Enumeration</h2>
+                <div id="dnsEnumOutput" class="text-gray-200"></div>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="terminal">
+                <h2 class="text-xl font-semibold text-blue-400 mb-2">Weather Scan</h2>
+                <div id="weatherOutput" class="text-gray-200"></div>
+            </div>
+            <div class="terminal">
+                <h2 class="text-xl font-semibold text-blue-400 mb-2">News Feed</h2>
+                <div id="newsOutput" class="text-gray-200"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const recognition = window.SpeechRecognition || window.webkitSpeechRecognition
+            ? new (window.SpeechRecognition || window.webkitSpeechRecognition)()
+            : null;
+        let isListening = false;
+
+        function updateStatus(message) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+        }
+
+        if (recognition) {
+            recognition.continuous = false;
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+            recognition.onresult = async (event) => {
+                const transcript = event.results[0][0].transcript;
+                document.getElementById('commandInput').value = transcript;
+                stopVoice();
+                await sendCommand();
+                updateStatus('Ready, boss.');
+            };
+            recognition.onend = () => {
+                if (isListening) {
+                    recognition.start();
+                }
+            };
+            recognition.onerror = (event) => {
+                updateStatus(`Voice error: ${event.error}`);
+                document.getElementById('voiceStatus').classList.remove('hidden');
+                stopVoice();
+            };
+        }
+
+        function toggleVoice() {
+            if (!recognition) {
+                updateStatus('Web Speech API unsupported. Using server-side recognition...');
+                serverSideVoiceRecognition();
+                return;
+            }
+            if (isListening) {
+                stopVoice();
+            } else {
+                document.getElementById('voiceStatus').classList.remove('hidden');
+                document.getElementById('voiceButton').classList.add('recording');
+                recognition.start();
+                isListening = true;
+                updateStatus('Listening...');
+            }
+        }
+
+        async function serverSideVoiceRecognition() {
+            document.getElementById('loadingSpinner').style.display = 'block';
+            updateStatus('Processing voice input...');
+            let attempts = 0, maxAttempts = 3;
+            while (attempts < maxAttempts) {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 10000);
+                    const response = await fetch('/process', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ input: 'recognize speech' }),
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+                    if (!response.ok) throw new Error(`Server error: ${response.status}`);
+                    const data = await response.json();
+                    document.getElementById('loadingSpinner').style.display = 'none';
+                    if (data.error) {
+                        addToOutput(data.error);
+                        updateStatus(`Error: ${data.error}`);
+                    } else {
+                        document.getElementById('commandInput').value = data.response;
+                        await sendCommand();
+                    }
+                    return;
+                } catch (error) {
+                    attempts++;
+                    if (attempts === maxAttempts) {
+                        document.getElementById('loadingSpinner').style.display = 'none';
+                        addToOutput(`Voice input failed after ${maxAttempts} attempts: ${error.message}`);
+                        updateStatus('Voice input failed.');
+                    } else {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
+            }
+        }
+
+        function stopVoice() {
+            if (recognition && isListening) {
+                recognition.stop();
+                isListening = false;
+                document.getElementById('voiceStatus').classList.add('hidden');
+                document.getElementById('voiceButton').classList.remove('recording');
+                updateStatus('Ready, boss.');
+            }
+        }
+
+        async function sendCommand() {
+            const input = document.getElementById('commandInput').value.trim();
+            if (!input) {
+                addToOutput('No input provided, boss.');
+                updateStatus('No input provided.');
+                return;
+            }
+            document.getElementById('loadingSpinner').style.display = 'block';
+            updateStatus(`Processing: ${input}...`);
+            let attempts = 0, maxAttempts = 3;
+            while (attempts < maxAttempts) {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 10000);
+                    let response, data;
+                    if (input.toLowerCase().startsWith('port scan ')) {
+                        const host = input.replace(/^port scan /i, '').trim();
+                        response = await fetch(`/port_scan/${encodeURIComponent(host)}`, { signal: controller.signal });
+                    } else if (input.toLowerCase().startsWith('crawl website ')) {
+                        const url = input.replace(/^crawl website /i, '').trim();
+                        response = await fetch(`/crawl_website/${encodeURIComponent(url)}`, { signal: controller.signal });
+                    } else if (input.toLowerCase().startsWith('threat intel ')) {
+                        const target = input.replace(/^threat intel /i, '').trim();
+                        response = await fetch(`/threat_intel/${encodeURIComponent(target)}`, { signal: controller.signal });
+                    } else if (input.toLowerCase().startsWith('dns enum ')) {
+                        const domain = input.replace(/^dns enum /i, '').trim();
+                        response = await fetch(`/dns_enum/${encodeURIComponent(domain)}`, { signal: controller.signal });
+                    } else {
+                        response = await fetch('/process', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ input }),
+                            signal: controller.signal
+                        });
+                    }
+                    clearTimeout(timeoutId);
+                    if (!response.ok) throw new Error(`Server returned ${response.status}`);
+                    data = await response.json();
+                    document.getElementById('loadingSpinner').style.display = 'none';
+                    const outputText = `> ${input}\nArker: ${data.result || data.response || data.error || 'No response'}`;
+                    addToOutput(outputText);
+                    if (input.toLowerCase().startsWith('weather in ')) {
+                        document.getElementById('weatherOutput').innerText = data.response || data.error || 'No data';
+                    } else if (input.toLowerCase().includes('news')) {
+                        document.getElementById('newsOutput').innerText = data.response || data.error || 'No news';
+                    } else if (input.toLowerCase().startsWith('port scan ')) {
+                        document.getElementById('portScanOutput').innerText = data.result || data.error || 'No scan data';
+                    } else if (input.toLowerCase().startsWith('crawl website ')) {
+                        document.getElementById('osintOutput').innerText = data.result || data.error || 'No crawl data';
+                    } else if (input.toLowerCase().startsWith('threat intel ')) {
+                        document.getElementById('threatIntelOutput').innerText = data.result || data.error || 'No threat data';
+                    } else if (input.toLowerCase().startsWith('dns enum ')) {
+                        document.getElementById('dnsEnumOutput').innerText = data.result || data.error || 'No DNS data';
+                    }
+                    updateStatus('Command executed successfully.');
+                    return;
+                } catch (error) {
+                    attempts++;
+                    if (attempts === maxAttempts) {
+                        document.getElementById('loadingSpinner').style.display = 'none';
+                        addToOutput(`Command failed after ${maxAttempts} attempts: ${error.message}`);
+                        updateStatus('Command failed.');
+                    } else {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
+            }
+            document.getElementById('commandInput').value = '';
+        }
+
+        function addToOutput(text) {
+            const outputDiv = document.getElementById('output');
+            outputDiv.innerText += (outputDiv.innerText ? '\n\n' : '') + text;
+            outputDiv.scrollTop = outputDiv.scrollHeight;
+        }
+
+        document.getElementById('commandInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendCommand();
+            }
+        });
+
+        window.onload = async () => {
+            document.getElementById('loadingSpinner').style.display = 'block';
+            updateStatus('Loading initial news...');
+            try {
+                const response = await fetch('/news');
+                if (!response.ok) throw new Error(`Server returned ${response.status}`);
+                const data = await response.json();
+                document.getElementById('loadingSpinner').style.display = 'none';
+                document.getElementById('newsOutput').innerText = data.news || data.error || 'No news available';
+                updateStatus('Ready, boss.');
+            } catch (error) {
+                document.getElementById('loadingSpinner').style.display = 'none';
+                addToOutput(`Initial news fetch failed: ${error.message}`);
+                updateStatus('News fetch failed.');
+            }
+        };
+    </script>
+</body>
+</html>
